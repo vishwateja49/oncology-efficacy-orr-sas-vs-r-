@@ -1,88 +1,87 @@
-# Oncology Efficacy Table (ORR): SAS vs R (pharmaverse)
-<img width="841" height="280" alt="Screenshot 2026-01-06 102945" src="https://github.com/user-attachments/assets/efe0501f-b0a9-4319-aafe-0ec6d0c2a512" />
+# Oncology Objective Response Rate (ORR) Efficacy Table  
+### SAS vs R 
 
-This repository demonstrates an industry-style implementation of an
-oncology Objective Response Rate (ORR) efficacy table using:
+This repository demonstrates a **real-world clinical reporting implementation**
+of an oncology Objective Response Rate (ORR) efficacy table using:
 
-- **SAS** (traditional clinical reporting workflow)
-- **R (pharmaverse + ADaM-based analysis)**
+- **SAS** (PROC FREQ, PROC SQL, ODS)
+- **R** (pharmaverse ADaM data + tidyverse + r2rtf)
 
-The goal is not to teach syntax, but to showcase **production-level thinking,
-traceability, and efficiency** when transitioning from SAS to R in a
-regulated clinical research environment.
-
+The project is designed to reflect **production-style oncology reporting**
+rather than tutorial examples, with identical business logic implemented
+independently in SAS and R.
 ## Objective
 
-- Generate a Summary of Objective Response Rate (ORR) table
-- Based on ADaM datasets (ADSL, ADRS)
-- Using identical business logic in:
-  - SAS
-  - R (pharmaverse ecosystem)
-- Compare **code structure, readability, and scalability**
-
-## Why This Repository?
-
-Most SAS vs R examples online are academic or toy examples.
-
-This project reflects:
-- Real-world oncology endpoints
-- ADaM-compliant inputs
-- Table-ready outputs suitable for CSR or IB use
-- A programmer’s perspective who has **worked in SAS-first environments**
-  and is now leveraging R for efficiency and reproducibility.
+- Summarize Best Overall Response (BOR)
+- Derive Objective Response Rate (CR or PR)
+- Compute:
+  - Clopper–Pearson 95% CI for ORR
+  - Difference in ORR vs Placebo
+  - 95% CI for difference
+  - P-value for treatment comparison
+- Produce a CSR-ready RTF table
 ## Input Data
 
-- **ADSL**: Subject-level analysis dataset
-- **ADRS**: Tumor response analysis dataset
+- **ADSL** – Subject-level analysis dataset  
+- **ADRS** – Tumor response analysis dataset  
 
-Data used here is:
-- Synthetic / anonymized
-- Structurally aligned with CDISC ADaM
-- Designed to reflect real oncology workflows
+The datasets are **synthetic ADaM data provided by the pharmaverse ecosystem**.
+
+- No real clinical trial data is used
+- No proprietary or sponsor data is included
+- Data is included to ensure reproducibility
+## Endpoint Definitions
+
+- **Best Overall Response (BOR)**:
+  - CR, PR, SD, PD based on tumor response records
+
+- **Objective Response Rate (ORR)**:
+  - Proportion of subjects with CR or PR
+## Statistical Methods
+
+- ORR calculated by treatment group
+- Exact binomial (Clopper–Pearson) 95% CI for ORR
+- Difference in ORR between active treatment and placebo
+- Approximate 95% CI for difference
+- Cochran–Armitage / Chi-square test for treatment comparison
 ## SAS Implementation
 
-The SAS program follows a conventional clinical reporting flow:
+The SAS program uses standard clinical reporting procedures:
 
-- Data preparation using DATA step and PROC SQL
-- Derivation of best overall response
-- Calculation of ORR and confidence intervals
-- Table formatting suitable for RTF output
+- PROC SQL for Big N derivation
+- PROC FREQ for:
+  - BOR counts
+  - ORR estimation
+  - Exact binomial CI
+  - Risk difference and CI
+- PROC TRANSPOSE for table shaping
+- ODS OUTPUT for statistical results
 
-This mirrors typical CRO and sponsor-side workflows.
+This reflects a traditional CRO/sponsor oncology reporting workflow.
 ## R Implementation (pharmaverse)
 
-The R workflow uses:
-- `pharmaverseadam` for ADaM-aligned data handling
-- Functional, modular code design
-- Clear separation between:
-  - data preparation
-  - analysis logic
-  - table generation
+The R program reproduces the same analysis logic using:
 
-Compared to SAS, this approach:
-- Reduces boilerplate code
-- Improves readability
-- Enhances reproducibility and version control
-# SAS vs R: Practical Insights from an Oncology Table
+- `pharmaverseadam` for ADaM-aligned data
+- `dplyr` and `tidyr` for derivations
+- `binom` for exact confidence intervals
+- `DescTools` for trend testing
+- `r2rtf` for CSR-ready table output
 
-## What SAS Does Well
-- Established validation processes
-- Familiar to regulatory teams
-- Stable for legacy pipelines
+The script demonstrates how SAS-style reporting logic
+can be translated into an R workflow while maintaining
+clinical rigor.
+## Output
 
-## Where R Adds Real Value
-- Faster iteration for complex endpoints
-- Cleaner abstraction of analysis logic
-- Better collaboration via Git
-- Easier extension to visual analytics
+<img width="841" height="280" alt="Screenshot 2026-01-06 102945" src="https://github.com/user-attachments/assets/20a78681-8174-4562-a84e-12c4ce44d10a" />
 
-## Key Takeaway
-R is not a replacement for SAS.
-It is an accelerator when used by programmers who understand
-clinical standards and reporting expectations.
-## What This Demonstrates
 
-- Hands-on experience with oncology efficacy endpoints
-- Ability to translate SAS logic into R without loss of rigor
-- Comfort working with ADaM datasets
-- Practical understanding of regulated clinical reporting
+The output layout mirrors standard oncology efficacy tables
+used in clinical study reports.
+## SAS vs R: Practical Notes
+
+- SAS provides established, regulator-familiar procedures
+- R offers improved modularity, readability, and version control
+- Both implementations use the same endpoint definitions
+- Differences reflect tool-specific idioms, not analytical intent
+
