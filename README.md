@@ -7,6 +7,10 @@ of an oncology Objective Response Rate (ORR) efficacy table using:
 - **SAS** (PROC FREQ, PROC SQL, ODS)
 - **R** (pharmaverse ADaM data + tidyverse + r2rtf)
 
+## Output
+
+<img width="841" height="280" alt="Screenshot 2026-01-06 102945" src="https://github.com/user-attachments/assets/20a78681-8174-4562-a84e-12c4ce44d10a" />
+
 The project is designed to reflect **production-style oncology reporting**
 rather than tutorial examples, with identical business logic implemented
 independently in SAS and R.
@@ -71,9 +75,6 @@ The R program reproduces the same analysis logic using:
 The script demonstrates how SAS-style reporting logic
 can be translated into an R workflow while maintaining
 clinical rigor.
-## Output
-
-<img width="841" height="280" alt="Screenshot 2026-01-06 102945" src="https://github.com/user-attachments/assets/20a78681-8174-4562-a84e-12c4ce44d10a" />
 
 
 The output layout mirrors standard oncology efficacy tables
