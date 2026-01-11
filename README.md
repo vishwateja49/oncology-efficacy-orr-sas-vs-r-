@@ -34,6 +34,12 @@ The datasets are **synthetic ADaM data provided by the pharmaverse ecosystem**.
 - No real clinical trial data is used
 - No proprietary or sponsor data is included
 - Data is included to ensure reproducibility
+## How to Run
+
+- R: Run `r/t_orr.R`
+- SAS: Run `sas/t_orr.sas`
+- Input data: `data/adam/`
+
 ## Endpoint Definitions
 
 - **Best Overall Response (BOR)**:
