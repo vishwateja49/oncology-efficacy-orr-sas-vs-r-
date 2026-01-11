@@ -271,6 +271,6 @@ orr_table_rtf %>%
   ) %>%
   rtf_encode() %>%
   write_rtf(
-    "//Novotech.com.au/files/Data_management/02-Data Management/SAS_Trainee/Trainings/Trainees/Vishwa/SRR/output/summary_ORR.rtf"
+    "summary_ORR.rtf"
   )
 
