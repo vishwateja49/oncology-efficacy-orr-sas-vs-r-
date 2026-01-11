@@ -1,195 +1,261 @@
+/*******************************************************************************
+ * Program: best_overall_response_analysis.sas
+ * Purpose: Analyze Best Overall Response (BOR) and Objective Response Rate (ORR)
+ * Inputs:  ADAM.ADSL, ADAM.ADRS
+ * Outputs: fin1 (final analysis dataset)
+ ******************************************************************************/
 
-/*------------------------------------------------------------
- Program: t_orr.sas
- Purpose: Oncology Objective Response Rate (ORR) Efficacy Table
- Inputs : ADSL, ADRS (ADaM)
-------------------------------------------------------------*/
-
-/*------------------------------------------------------------
- Import analysis datasets
-------------------------------------------------------------*/
+/* Set library reference */
 libname adam "&path.";
 
-/*------------------------------------------------------------
- Derive analysis population and Big N
-------------------------------------------------------------*/
-data adsl_ana;
-    set adam.adsl;
-    where TRT01P not in ( "Screen Failure" "Xanomeline Low Dose");
-run;
-
+/*-----------------------------------------------------------------------------
+ * SECTION 1: Calculate treatment group denominators (Big N)
+ *---------------------------------------------------------------------------*/
 proc sql;
-    create table bigN as
-    select
-        TRT01P,
-        count(distinct USUBJID) as N
-    from adsl_ana
+    /* Get counts for each treatment group */
+    select count(distinct USUBJID) into :N1-:N3 
+    from adam.adsl(where=(TRT01P ne "Screen Failure"))
+    group by TRT01P
+    order by TRT01P;
+    
+    /* Create denominator dataset */
+    create table bign as 
+    select count(distinct USUBJID) as bign, TRT01P  
+    from adam.adsl(where=(TRT01P ne "Screen Failure"))
     group by TRT01P
     order by TRT01P;
 quit;
 
-/*------------------------------------------------------------
- Prepare BOR records
-------------------------------------------------------------*/
-data adrs_bor;
+%put Treatment Group Ns: &N1 &N2 &N3;
+
+/*-----------------------------------------------------------------------------
+ * SECTION 2: Best Overall Response Categories (CR, PR, SD, PD)
+ *---------------------------------------------------------------------------*/
+
+/* Filter to BOR parameter and relevant response categories */
+data bor_responses;
     set adam.adrs;
-    where PARAMCD = "BOR"
-          and RSORRES in ("CR","PR","SD","PD");
+    where RSORRES in ("CR" "PR" "SD" "PD") and PARAMCD = "BOR";
 run;
 
-proc sort data=adrs_bor; by TRT01P; run;
-
-/*------------------------------------------------------------
- BOR frequency and percentages
-------------------------------------------------------------*/
-proc freq data=adrs_bor noprint;
+/* Get frequency counts by treatment and response */
+proc sort data=bor_responses; 
     by TRT01P;
-    tables RSORRES / out=bor_freq;
 run;
 
+proc freq data=bor_responses noprint;
+    table RSORRES / out=bor_freq;
+    by TRT01P;
+run;
+
+/* Merge with denominators and calculate percentages */
+proc sort data=bign; by TRT01P; run;
 proc sort data=bor_freq; by TRT01P; run;
-proc sort data=bigN; by TRT01P; run;
 
 data bor_summary;
-    length display $100;
-    merge bor_freq(in=a) bigN(in=b);
+    length RSORRES_ $100.;
+    merge bign(in=a) bor_freq(in=b);
     by TRT01P;
-    if a;
-
-    pct = (count / N) * 100;
-    value = cats(put(count, best.), " (", put(pct, 7.2), "%)");
-
+    if b;
+    
+    /* Format as n(%) */
+    val = put(COUNT, best.) || "(" || strip(put((COUNT/bign)*100, 7.2)) || "%)";
+    
+    /* Assign display labels and sort order */
     select (RSORRES);
-        when ("CR") do; display="  Complete Response (CR)"; order=1; end;
-        when ("PR") do; display="  Partial Response (PR)"; order=2; end;
-        when ("SD") do; display="  Stable Disease (SD)";   order=3; end;
-        when ("PD") do; display="  Progressive Disease (PD)"; order=4; end;
-        otherwise;
+        when ("CR") do;
+            RSORRES_ = "	Complete Response (CR)";
+            subsec = 1;
+        end;
+        when ("PR") do;
+            RSORRES_ = "	Partial Response (PR)";
+            subsec = 2;
+        end;
+        when ("SD") do;
+            RSORRES_ = "	Stable Disease (SD)";
+            subsec = 3;
+        end;
+        when ("PD") do;
+            RSORRES_ = "	Progressive Disease (PD)";
+            subsec = 4;
+        end;
     end;
-
-    section = 1;
+    sec = 1;
 run;
 
-proc sort data=bor_summary; by section order display; run;
+/* Transpose to wide format */
+proc sort data=bor_summary; 
+    by RSORRES_ sec subsec;
+run;
 
-proc transpose data=bor_summary out=bor_table;
-    by display section order;
+proc transpose data=bor_summary out=bor_transposed;
+    var val;
+    by RSORRES_ sec subsec;
     id TRT01P;
-    var value;
 run;
 
-/*------------------------------------------------------------
- Objective Response Rate (CR or PR)
-------------------------------------------------------------*/
-data orr_flag;
-    set adrs_bor;
-    orr = (RSORRES in ("CR","PR"));
+/* Add header row and fill missing values */
+data bor_header;
+    length RSORRES_ $100.;
+    RSORRES_ = "Best Overall Response";
+    subsec = 0;
 run;
 
-proc freq data=orr_flag noprint;
+data bor_final;
+    set bor_header bor_transposed;
+    
+    /* Replace missing with 0 for display */
+    if subsec > 0 then do;
+        if missing(Placebo) then Placebo = "0";
+        if missing("Xanomeline High Dose"n) then "Xanomeline High Dose"n = "0";
+        if missing("Xanomeline Low Dose"n) then "Xanomeline Low Dose"n = "0";
+    end;
+run;
+
+/*-----------------------------------------------------------------------------
+ * SECTION 3: Best Objective Response (CR or PR)
+ *---------------------------------------------------------------------------*/
+
+/* Create binary indicator for objective response */
+data orr_data;
+    set adam.adrs;
+    where RSORRES ne "" and PARAMCD = "BOR";
+    
+    if RSORRES in ("CR" "PR") then obj = 0;  /* Response */
+    else if RSORRES ne "" then obj = 1;      /* Non-response */
+run;
+
+proc sort data=orr_data; 
     by TRT01P;
-    tables orr / out=orr_freq(where=(orr=1));
 run;
 
+/* Count objective responses by treatment */
+proc freq data=orr_data noprint;
+    by TRT01P;
+    tables obj / out=orr_freq(drop=percent where=(obj=0));
+run;
+
+/* Calculate ORR with percentages */
+proc sort data=bign; by TRT01P; run;
 proc sort data=orr_freq; by TRT01P; run;
 
 data orr_summary;
-    length display $100;
-    merge orr_freq bigN;
+    length RSORRES_ $100.;
+    merge bign(in=a) orr_freq(in=b);
     by TRT01P;
-
-    pct = (count / N) * 100;
-    value = cats(put(count,best.)," (",put(pct,7.2),"%)");
-
-    display = "Best Objective Response (CR or PR)";
-    section = 2;
+    if b;
+    
+    val = put(COUNT, best.) || "(" || strip(put((COUNT/bign)*100, 7.2)) || "%)";
+    RSORRES_ = "Best Objective Response (CR or PR)";
+    subsec = 1;
+    sec = 2;
 run;
 
-proc transpose data=orr_summary out=orr_table;
-    by display section;
+proc sort data=orr_summary; 
+    by RSORRES_ sec subsec;
+run;
+
+proc transpose data=orr_summary out=orr_transposed;
+    var val;
+    by RSORRES_ sec subsec;
     id TRT01P;
-    var value;
 run;
 
-/*------------------------------------------------------------
- 95% CI for ORR (Clopper–Pearson)
-------------------------------------------------------------*/
-proc freq data=orr_flag;
+/*-----------------------------------------------------------------------------
+ * SECTION 4: 95% CI for ORR (Clopper-Pearson)
+ *---------------------------------------------------------------------------*/
+
+proc freq data=orr_data;
     by TRT01P;
-    tables orr / binomial(exact);
-    ods output BinomialCLs=orr_ci_raw;
+    table obj / binomial(exact);
+    ods output binomialcls=orr_ci;
 run;
 
-data orr_ci;
-    length display $100 value $40;
-    set orr_ci_raw;
-    value = cats(put(LowerCL,7.2),"% - ",put(UpperCL,7.2),"%");
-    display = "95% CI for Objective Response Rate";
-    section = 3;
+data orr_ci_formatted;
+    length RSORRES_ $100.;
+    set orr_ci;
+    
+    ci = put(LowerCL, 7.2) || "%  -" || put(UpperCL, 7.2) || "%";
+    RSORRES_ = "95% CI for Objective Response Rate ";
+    sec = 3;
 run;
 
-proc transpose data=orr_ci out=orr_ci_table;
-    by display section;
+proc sort data=orr_ci_formatted; 
+    by RSORRES_ sec;
+run;
+
+proc transpose data=orr_ci_formatted out=orr_ci_transposed;
+    var ci;
     id TRT01P;
-    var value;
+    by RSORRES_ sec;
 run;
 
-/*------------------------------------------------------------
- Difference in ORR vs Placebo
-------------------------------------------------------------*/
-proc freq data=orr_flag;
-    tables orr*TRT01P / riskdiff(equal var=null);
-    ods output RiskDiffCol1=orr_diff_raw;
+/*-----------------------------------------------------------------------------
+ * SECTION 5: Treatment Comparison Statistics
+ *---------------------------------------------------------------------------*/
+
+/* Calculate risk difference and 95% CI */
+proc freq data=orr_data;
+    tables obj*TRT01P / exact riskdiff(equal var=null);
+    ods output RiskDiffCol1=risk_diff;
 run;
 
-data orr_diff;
-    length display $100 value $40;
-    set orr_diff_raw;
-    if Row="Difference";
-    value = cats(put(Risk,7.4),"%");
-    display = "Difference in Objective Response Rate";
-    section = 4;
+/* Format risk difference */
+data risk_diff_point;
+    length tt $100.;
+    set risk_diff;
+    where Row = "Difference";
+    
+    tt = put(Risk, 7.4) || "%";
+    RSORRES_ = " Difference in Objective Response Rate ";
+    sec = 4;
 run;
 
-data orr_diff_ci;
-    length display $100 value $40;
-    set orr_diff_raw;
-    if Row="Difference";
-    value = cats(put(LowerCL,7.2),"% - ",put(UpperCL,7.2),"%");
-    display = "95% CI for Difference in Objective Response Rate";
-    section = 5;
+/* Format confidence interval for difference */
+data risk_diff_ci;
+    length tt $100.;
+    set risk_diff;
+    where Row = "Difference";
+    
+    tt = put(LowerCL, 7.2) || "%  -" || put(UpperCL, 7.2) || "%";
+    RSORRES_ = "  95% CI for Difference in Objective Response Rate ";
+    sec = 5;
 run;
 
-/*------------------------------------------------------------
- P-value for treatment comparison
-------------------------------------------------------------*/
-proc freq data=orr_flag;
-    tables TRT01P*orr / chisq;
-    ods output ChiSq=chisq_raw;
+/* Chi-square test for treatment comparison */
+proc freq data=orr_data;
+    table TRT01P*obj / chisq;
+    ods output ChiSq=chisq_test;
 run;
 
 data pvalue;
-    length display $100 value $20;
-    set chisq_raw;
-    if Statistic="Chi-Square";
-    value = put(Prob,7.4);
-    display = "P-value";
-    section = 6;
+    set chisq_test;
+    where Statistic = "Chi-Square";
+    
+    tt = put(Prob, 7.4);
+    RSORRES_ = "  P-value";
+    sec = 6;
 run;
 
-/*------------------------------------------------------------
- Final table assembly
-------------------------------------------------------------*/
-data final_table;
-    set
-        bor_table
-        orr_table
-        orr_ci_table
-        orr_diff
-        orr_diff_ci
+/*-----------------------------------------------------------------------------
+ * SECTION 6: Combine All Results
+ *---------------------------------------------------------------------------*/
+
+data fin1;
+    set bor_final 
+        orr_transposed 
+        orr_ci_transposed 
+        risk_diff_point 
+        risk_diff_ci 
         pvalue;
+    keep RSORRES_ tt "Xanomeline High Dose"n Placebo sec subsec;
 run;
 
-proc sort data=final_table;
-    by section;
+proc sort data=fin1; 
+    by sec subsec;
 run;
+
+/* Clean up temporary datasets */
+proc datasets library=work nolist;
+    delete bor_: orr_: risk_diff: chisq_test pvalue bign;
+quit;
